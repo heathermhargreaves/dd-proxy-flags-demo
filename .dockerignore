@@ -1,0 +1,11 @@
+node_modules
+.git
+.env
+.secrets
+.runtime
+*.pem
+*.key
+.DS_Store
+test
+examples
+npm-debug.log*

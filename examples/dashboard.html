@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Datadog Feature Flag Proxy</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+    body { background: #111217; color: #f5f6f7; margin: 0; padding: 32px; }
+    main { margin: 0 auto; max-width: 1100px; }
+    h1 { margin-bottom: 4px; }
+    .subtitle { color: #a9acb3; margin-top: 0; }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin: 28px 0; }
+    .card { background: #1c1e26; border: 1px solid #30333d; border-radius: 12px; padding: 20px; }
+    .label { color: #a9acb3; font-size: 13px; text-transform: uppercase; }
+    .value { font-size: 36px; font-weight: 700; margin-top: 8px; }
+    .good { color: #56d69b; }
+    .warn { color: #f7b955; }
+    .controls { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; }
+    button { background: #632ca6; border: 0; border-radius: 8px; color: white; cursor: pointer; padding: 11px 16px; }
+    button.secondary { background: #343741; }
+    code { background: #1c1e26; border-radius: 4px; padding: 2px 6px; }
+    pre { background: #1c1e26; border: 1px solid #30333d; border-radius: 12px; min-height: 84px; overflow: auto; padding: 16px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Server-side Feature Flag Proxy</h1>
+  <p class="subtitle">Local evaluations compared with configuration requests and estimated MFCR.</p>
+
+  <div class="grid">
+    <section class="card"><div class="label">Local evaluations</div><div class="value" id="evaluations">0</div></section>
+    <section class="card"><div class="label">Exposure events emitted</div><div class="value" id="exposures">0</div></section>
+    <section class="card"><div class="label">SDK polls to proxy</div><div class="value" id="polls">0</div></section>
+    <section class="card"><div class="label">Datadog CDN requests</div><div class="value" id="cdn">0</div></section>
+    <section class="card"><div class="label">Estimated billable MFCR</div><div class="value" id="mfcr">0</div></section>
+    <section class="card"><div class="label">Proxy readiness</div><div class="value" id="ready">—</div></section>
+    <section class="card"><div class="label">Configuration age</div><div class="value" id="age">—</div></section>
+    <section class="card"><div class="label">Exposure eligible</div><div class="value" id="exposure">Evaluate</div></section>
+  </div>
+
+  <div class="controls">
+    <button id="evaluate">Evaluate once</button>
+    <button id="load">Start 10 evaluations/sec</button>
+    <button class="secondary" id="reset">Clear result</button>
+    <span>Evaluations are local and do not consume MFCR.</span>
+  </div>
+
+  <h2>Latest evaluation</h2>
+  <pre id="result">No evaluation yet.</pre>
+</main>
+<script>
+  let loadTimer
+  const byId = (id) => document.getElementById(id)
+
+  async function requestJson(url) {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`)
+    return response.json()
+  }
+
+  async function refresh() {
+    try {
+      const data = await requestJson('/api/dashboard')
+      byId('evaluations').textContent = data.application.evaluationCount.toLocaleString()
+      byId('exposures').textContent = data.application.exposureEventsEmitted.toLocaleString()
+      byId('polls').textContent = data.proxy.downstream.clientRequests.toLocaleString()
+      byId('cdn').textContent = data.proxy.mfcr.rawDatadogConfigurationRequests.toLocaleString()
+      byId('mfcr').textContent = data.proxy.mfcr.estimatedBillableServerMfcr.toLocaleString()
+      byId('ready').textContent = data.proxy.health.ready ? 'Ready' : 'Not ready'
+      byId('ready').className = `value ${data.proxy.health.ready ? 'good' : 'warn'}`
+      byId('age').textContent = data.proxy.health.ageMs == null
+        ? '—'
+        : `${Math.round(data.proxy.health.ageMs / 1000)}s`
+    } catch (error) {
+      byId('ready').textContent = 'Unavailable'
+      byId('ready').className = 'value warn'
+    }
+  }
+
+  async function evaluate() {
+    const result = await requestJson(`/api/evaluate?user=dashboard-${Date.now()}`)
+    byId('result').textContent = JSON.stringify(result, null, 2)
+    byId('exposure').textContent = result.exposureEligible ? 'Yes' : 'No'
+    byId('exposure').className = `value ${result.exposureEligible ? 'good' : 'warn'}`
+    await refresh()
+  }
+
+  byId('evaluate').addEventListener('click', evaluate)
+  byId('load').addEventListener('click', () => {
+    if (loadTimer) {
+      clearInterval(loadTimer)
+      loadTimer = undefined
+      byId('load').textContent = 'Start 10 evaluations/sec'
+      return
+    }
+    loadTimer = setInterval(evaluate, 100)
+    byId('load').textContent = 'Stop continuous evaluations'
+  })
+  byId('reset').addEventListener('click', () => { byId('result').textContent = 'No evaluation yet.' })
+
+  setInterval(refresh, 1000)
+  refresh()
+</script>
+</body>
+</html>

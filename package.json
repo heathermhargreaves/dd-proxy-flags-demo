@@ -1,0 +1,22 @@
+{
+  "name": "datadog-server-feature-flag-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A caching relay for Datadog server-side feature flag configuration.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "start:app": "node examples/customer-app.js",
+    "agent:start": "node scripts/start-user-agent.js",
+    "demo:start": "node scripts/start-demo.js",
+    "check": "node --check src/cache-store.js && node --check src/proxy.js && node --check src/server.js && node --check examples/customer-app.js && node --check scripts/start-demo.js && node --check scripts/start-user-agent.js"
+  },
+  "dependencies": {
+    "@openfeature/server-sdk": "1.23.0",
+    "dd-trace": "^6.17.0",
+    "redis": "6.2.1"
+  }
+}
